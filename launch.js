@@ -2,34 +2,56 @@ const liveServer = require('live-server');
 const openfinConfigBuilder = require('openfin-config-builder');
 const openfinLauncher = require('openfin-launcher');
 const path = require('path');
+const readline = require('readline');
 
-const port = process.env.npm_package_config_port || 5000;
-const target = 'http://localhost:' + port;
 const configPath = path.resolve('public/app.json');
+const openfinVersion = 'alpha';
+let target;
 const serverParams = {
-    port: port,
-    host: '0.0.0.0',
     root: path.resolve('public'),
     open: false,
     logLevel: 2
 };
 
-//Start the server server
-liveServer.start(serverParams);
-
 //Update our config and launch openfin.
-openfinConfigBuilder.update({
-    startup_app: {
-        url: target + '/index.html',
-        applicationIcon: target + '/favicon.ico'
-    },
-    runtime: {
-        arguments: '--remote-debugging-port=9090',
-        version: 'beta'
-    },
-    shortcut: {
-        icon: target + '/favicon.ico'
+function launchOpenFin() {
+    openfinConfigBuilder.update({
+        startup_app: {
+            url: target + '/index.html',
+            applicationIcon: target + '/favicon.ico',
+            saveWindowState: true
+        },
+        runtime: {
+            arguments: `--js-flags=--expose_gc --enable-precise-memory-info`,
+            version: openfinVersion
+        },
+        shortcut: {
+            icon: target + '/favicon.ico'
+        }
+    }, configPath)
+        .then(openfinLauncher.launchOpenFin({ configPath: configPath }))
+        .catch(err => console.log(err));
+}
+
+
+//Start the server server and initially launch
+liveServer.start(serverParams).on('listening', () => {
+    const { address, port } = liveServer.server.address();
+    target = `http://localhost:${ port }`;
+    launchOpenFin();
+});
+
+//then on any keypress re-launch
+readline.emitKeypressEvents(process.stdin);
+process.stdin.setRawMode(true);
+process.stdin.on('keypress', (str, key) => {
+    if (key.ctrl && key.name === 'c') {
+        process.exit();
+    } else if (key.ctrl && key.name === 'l') {
+        console.log('launching OpenFin');
+        launchOpenFin();
     }
-}, configPath)
-.then(openfinLauncher.launchOpenFin({ configPath: configPath }))
-.catch(err => console.log(err));
+});
+
+console.log('re-launch OpenFin by ctrl+l');
+console.log('exit by pressing ctr+c');
